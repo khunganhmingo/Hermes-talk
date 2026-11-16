@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Gemini Live — Hermes MCP Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #0B0D14;
+      --cyan-glow: #38BDF8;
+      --indigo-glow: #6366F1;
+      --purple-glow: #A855F7;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #06080D;
+      color: #F8FAFC;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      overflow-x: hidden;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Ambient background glow */
+    .ambient-bg {
+      position: fixed;
+      inset: 0;
+      background: 
+        radial-gradient(circle at 25% 20%, rgba(56, 189, 248, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 75% 75%, rgba(168, 85, 247, 0.09) 0%, transparent 50%),
+        #06080D;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* Main responsive container mimicking sleek mobile/desktop card */
+    .app-shell {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 480px;
+      height: 100dvh;
+      background: linear-gradient(180deg, #0D1019 0%, #0B0D14 55%, #090B11 100%);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    @media (min-width: 640px) {
+      .app-shell {
+        height: min(880px, 94dvh);
+        border-radius: 36px;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        box-shadow: 
+          0 25px 70px -15px rgba(0, 0, 0, 0.85),
+          0 0 40px rgba(99, 102, 241, 0.08),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+    }
+
+    /* Gradient Gemini Text */
+    .gemini-gradient-text {
+      background: linear-gradient(90deg, #60A5FA 0%, #A78BFA 55%, #E879F9 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* Live Pill Border */
+    .live-badge {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(167, 139, 250, 0.45);
+      box-shadow: 0 0 12px rgba(168, 85, 247, 0.15);
+    }
+
+    /* Status Pill */
+    .status-pill {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+    }
+
+    /* Dual Avatar Rings */
+    .avatar-ring-user {
+      background: linear-gradient(135deg, #38BDF8, #818CF8, #C084FC);
+      padding: 2.5px;
+      transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: 0 0 22px rgba(56, 189, 248, 0.28);
+    }
+
+    .avatar-ring-user.active {
+      transform: scale(1.07);
+      box-shadow: 0 0 34px rgba(56, 189, 248, 0.65), 0 0 12px rgba(192, 132, 252, 0.5);
+    }
+
+    .avatar-ring-gemini {
+      background: linear-gradient(135deg, #38BDF8, #6366F1, #A855F7);
+      padding: 2.5px;
+      transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: 0 0 22px rgba(168, 85, 247, 0.28);
+    }
+
+    .avatar-ring-gemini.active {
+      transform: scale(1.07);
+      box-shadow: 0 0 36px rgba(168, 85, 247, 0.7), 0 0 15px rgba(56, 189, 248, 0.55);
+    }
+
+    /* Glassmorphic Chat Bubbles */
+    .bubble-user {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(10px);
+    }
+
+    .bubble-gemini {
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.11) 0%, rgba(168, 85, 247, 0.08) 100%);
+      border: 1px solid rgba(139, 92, 246, 0.18);
+      backdrop-filter: blur(10px);
+    }
+
+    /* Custom Scrollbar for Transcript */
+    .transcript-scroll::-webkit-scrollbar {
+      width: 4px;
+    }
+    .transcript-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .transcript-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 9999px;
+    }
+
+    /* Mic Button Pulse */
+    @keyframes micPulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.45), 0 0 24px rgba(168, 85, 247, 0.35);
+      }
+      50% {
+        box-shadow: 0 0 0 14px rgba(56, 189, 248, 0), 0 0 32px rgba(168, 85, 247, 0.6);
+      }
+    }
+
+    .mic-btn-listening {
+      animation: micPulse 2s infinite;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.28), rgba(168, 85, 247, 0.32));
+      border-color: rgba(56, 189, 248, 0.7);
+    }
+
+    /* Soundwave dots in status pill */
+    @keyframes eqDot {
+      0%, 100% { transform: scaleY(0.45); opacity: 0.6; }
+      50% { transform: scaleY(1.2); opacity: 1; }
+    }
+    .eq-bar {
+      animation: eqDot 0.9s ease-in-out infinite;
+    }
+    .eq-bar:nth-child(2) { animation-delay: 0.15s; }
+    .eq-bar:nth-child(3) { animation-delay: 0.3s; }
+    .eq-bar:nth-child(4) { animation-delay: 0.45s; }
+
+    /* Slide-over Drawer */
+    .drawer-backdrop {
+      background: rgba(5, 7, 12, 0.75);
+      backdrop-filter: blur(6px);
+      transition: opacity 0.25s ease;
+    }
+    .drawer-panel {
+      background: #0E111B;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient-bg"></div>
+
+  <div class="app-shell" id="appShell">
+    <!-- Top Header -->
+    <header class="flex items-center justify-between px-5 pt-5 pb-2 shrink-0">
+      <div class="flex items-center gap-2">
+        <!-- Gemini Brand -->
+        <div class="flex items-center gap-1.5">
+          <svg class="w-5 h-5 text-sky-400" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2C12.3 7.4 16.6 11.7 22 12C16.6 12.3 12.3 16.6 12 22C11.7 16.6 7.4 12.3 2 12C7.4 11.7 11.7 7.4 12 2Z" fill="url(#geminiSpark)"/>
+            <defs>
+              <linearGradient id="geminiSpark" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#38BDF8"/>
+                <stop offset="0.5" stop-color="#818CF8"/>
+                <stop offset="1" stop-color="#C084FC"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <span class="text-[21px] font-semibold tracking-tight gemini-gradient-text">Gemini</span>
+        </div>
+
+        <!-- Live Badge -->
+        <span class="live-badge text-[11px] font-medium text-purple-200 px-2.5 py-0.5 rounded-full tracking-wide">
+          Live
+        </span>
+
+        <!-- Hermes MCP Connection Badge -->
+        <button id="headerMcpBtn" onclick="toggleMcpDrawer(true)" title="Cấu hình kết nối Hermes MCP"
+          class="flex items-center gap-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-cyan-500/25 rounded-full px-2.5 py-0.5 transition cursor-pointer">
+          <span id="mcpHeaderDot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34D399]"></span>
+          <span class="text-[10.5px] font-medium text-cyan-200/90 tracking-tight">Hermes MCP</span>
+        </button>
+      </div>
+
+      <!-- Right Status Pill -->
+      <div class="flex items-center gap-2">
+        <div id="statusPill" class="status-pill flex items-center gap-2 px-3 py-1.5 rounded-full">
+          <div class="flex items-center gap-[2px] h-3" id="statusEq">
+            <span class="eq-bar w-[2px] h-2 bg-sky-400 rounded-full"></span>
+            <span class="eq-bar w-[2px] h-3 bg-indigo-400 rounded-full"></span>
+            <span class="eq-bar w-[2px] h-2.5 bg-purple-400 rounded-full"></span>
+            <span class="eq-bar w-[2px] h-1.5 bg-sky-300 rounded-full"></span>
+          </div>
+          <span id="statusText" class="text-[12px] font-medium text-slate-200 tracking-tight">Listening...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Centerpiece Waveform Visualizer -->
+    <section class="relative w-full h-44 sm:h-48 shrink-0 flex items-center justify-center overflow-hidden select-none">
+      <canvas id="waveCanvas" class="w-full h-full block"></canvas>
+    </section>
+
+    <!-- Dual Avatars Row -->
+    <section class="flex items-center justify-center gap-10 sm:gap-12 pb-4 shrink-0">
+      <!-- User Avatar -->
+      <div class="flex flex-col items-center gap-2">
+        <div id="userAvatarRing" class="avatar-ring-user w-[70px] h-[70px] rounded-full flex items-center justify-center">
+          <div class="w-full h-full rounded-full bg-[#131826] flex items-center justify-center overflow-hidden relative">
+            <div class="absolute inset-0 bg-gradient-to-tr from-sky-500/20 via-indigo-500/15 to-amber-200/20"></div>
+            <svg class="w-9 h-9 text-slate-200/90 relative z-10 mt-1" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v2h20v-2c0-3.33-6.67-5-10-5z"/>
+            </svg>
+          </div>
+        </div>
+        <span class="text-[12.5px] font-medium text-slate-300 tracking-wide">User</span>
+      </div>
+
+      <!-- Gemini Avatar -->
+      <div class="flex flex-col items-center gap-2">
+        <div id="geminiAvatarRing" class="avatar-ring-gemini w-[70px] h-[70px] rounded-full flex items-center justify-center">
+          <div class="w-full h-full rounded-full bg-[#101420] flex items-center justify-center relative overflow-hidden">
+            <div class="absolute inset-0 bg-gradient-to-br from-sky-500/15 via-indigo-600/20 to-purple-600/25"></div>
+            <svg class="w-9 h-9 relative z-10" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2.5C12.35 7.6 16.4 11.65 21.5 12C16.4 12.35 12.35 16.4 12 21.5C11.65 16.4 7.6 12.35 2.5 12C7.6 11.65 11.65 7.6 12 2.5Z" fill="url(#avatarStarGrad)"/>
+              <defs>
+                <linearGradient id="avatarStarGrad" x1="2.5" y1="2.5" x2="21.5" y2="21.5" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#60A5FA"/>
+                  <stop offset="0.5" stop-color="#818CF8"/>
+                  <stop offset="1" stop-color="#C084FC"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+        </div>
+        <span class="text-[12.5px] font-medium text-slate-300 tracking-wide">Gemini</span>
+      </div>
+    </section>
+
+    <!-- Live Transcript / Chat Feed -->
+    <main id="transcriptContainer" class="transcript-scroll flex-1 overflow-y-auto px-5 py-2 space-y-3 flex flex-col">
+      <!-- Messages injected here dynamically -->
+    </main>
+
+    <!-- Live Interim Speech Caption -->
+    <div id="interimBar" class="hidden px-5 py-1.5 text-center">
+      <span id="interimText" class="inline-block text-xs text-sky-300/90 bg-sky-950/50 border border-sky-500/25 rounded-full px-3 py-1 italic truncate max-w-full"></span>
+    </div>
+
+    <!-- Optional Text Input Drawer Bar -->
+    <form id="textInputForm" onsubmit="handleTextSubmit(event)" class="hidden px-4 pt-2 pb-1 shrink-0">
+      <div class="flex items-center gap-2 bg-white/[0.06] border border-white/15 rounded-full px-3.5 py-1.5 focus-within:border-sky-400/60 transition">
+        <input id="chatTextInput" type="text" autocomplete="off"
+          placeholder="Nhập tin nhắn hoặc lệnh Hermes MCP..."
+          class="flex-1 bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none py-1" />
+        <button type="submit"
+          class="p-2 rounded-full bg-gradient-to-r from-sky-500 to-purple-500 text-white hover:opacity-90 transition cursor-pointer shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M13 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+    </form>
+
+    <!-- Bottom Controls -->
+    <footer class="px-6 pt-3 pb-6 shrink-0 flex items-center justify-center gap-6">
+      <!-- Keyboard Toggle -->
+      <button id="toggleKeyboardBtn" onclick="toggleTextInput()" title="Nhập văn bản"
+        class="w-11 h-11 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 flex items-center justify-center text-slate-300 transition cursor-pointer">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="2" y="5" width="20" height="14" rx="3"/>
+          <path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M8 16h8" stroke-linecap="round"/>
+        </svg>
+      </button>
+
+      <!-- Central Glowing Microphone Button -->
+      <button id="micToggleBtn" onclick="toggleVoiceSession()" title="Bật / Tắt micro trò chuyện"
+        class="w-16 h-16 rounded-full bg-white/[0.08] hover:bg-white/[0.13] border border-white/20 flex items-center justify-center text-white shadow-lg transition-all duration-300 cursor-pointer relative">
+        <svg id="micIconOn" class="w-6 h-6 text-slate-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M5 10a7 7 0 0 0 14 0M12 19v3M8 22h8" stroke-linecap="round"/>
+        </svg>
+        <svg id="micIconOff" class="w-6 h-6 text-rose-400 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="2" y1="2" x2="22" y2="22" stroke-linecap="round"/>
+          <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2M5 10v2a7 7 0 0 0 12 5M15 9.34V5a3 3 0 0 0-5.68-1.33M9 9v3a3 3 0 0 0 5.12 2.12M12 19v3M8 22h8" stroke-linecap="round"/>
+        </svg>
+      </button>
+
+      <!-- Hermes MCP Inspector & Settings Button -->
+      <button onclick="toggleMcpDrawer(true)" title="Hermes MCP Server & Logs"
+        class="w-11 h-11 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 flex items-center justify-center text-cyan-300 transition cursor-pointer relative">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/>
+        </svg>
+        <span id="mcpBadgeCount" class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-sky-500 text-[10px] font-bold text-slate-950 flex items-center justify-center">4</span>
+      </button>
+    </footer>
+
+    <!-- Hermes MCP Configuration & JSON-RPC Drawer -->
+    <div id="mcpDrawer" class="hidden absolute inset-0 z-50 flex flex-col justify-end">
+      <div class="drawer-backdrop absolute inset-0" onclick="toggleMcpDrawer(false)"></div>
+      <div class="drawer-panel relative z-10 rounded-t-3xl max-h-[86%] flex flex-col overflow-hidden shadow-2xl">
+        <!-- Drawer Handle & Title -->
+        <div class="px-5 pt-3 pb-3 border-b border-white/10 flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-500/20 to-purple-500/20 border border-sky-400/30 flex items-center justify-center text-sky-300">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="text-sm font-semibold text-white">Hermes MCP Bridge</h2>
+              <p class="text-[11px] text-slate-400">Model Context Protocol • JSON-RPC 2.0</p>
+            </div>
+          </div>
+          <button onclick="toggleMcpDrawer(false)" class="p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Drawer Body -->
+        <div class="p-5 overflow-y-auto space-y-5 transcript-scroll text-xs">
+          <!-- Connection Config -->
+          <div class="space-y-3 bg-white/[0.03] border border-white/10 rounded-2xl p-3.5">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-slate-200">Hermes Server Endpoint</span>
+              <span id="mcpConnStateLabel" class="px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                Hybrid Ready (Auto-Fallback)
+              </span>
+            </div>
+
+            <div class="space-y-2">
+              <label class="block text-[11px] text-slate-400">MCP HTTP / SSE Endpoint URL</label>
+              <div class="flex gap-2">
+                <input id="mcpEndpointInput" type="text" value="http://localhost:8080/mcp"
+                  class="flex-1 bg-black/40 border border-white/15 rounded-xl px-3 py-2 text-slate-200 font-mono-code text-[11px] focus:outline-none focus:border-sky-400" />
+                <button onclick="pingHermesMcp()"
+                  class="px-3 py-2 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-300 font-medium transition cursor-pointer shrink-0">
+                  Ping MCP
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Bearer Token (Tùy chọn)</label>
+                <input id="mcpTokenInput" type="password" placeholder="hermes_sk_..."
+                  class="w-full bg-black/40 border border-white/15 rounded-xl px-3 py-1.5 text-slate-200 font-mono-code text-[11px] focus:outline-none focus:border-sky-400" />
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Giọng đọc AI (TTS)</label>
+                <select id="voiceToggleSelect" class="w-full bg-black/40 border border-white/15 rounded-xl px-2.5 py-1.5 text-slate-200 text-[11px] focus:outline-none focus:border-sky-400">
+                  <option value="on">Bật giọng đọc (Tiếng Việt)</option>
+                  <option value="off">Chỉ hiển thị văn bản</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Available MCP Tools -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-slate-200">Hermes MCP Tools (<span id="activeToolCount">4</span> active)</span>
+              <button onclick="resetConversation()" class="text-[11px] text-rose-400 hover:underline cursor-pointer">
+                Xóa lịch sử chat
+              </button>
+            </div>
+            <div id="mcpToolsList" class="grid grid-cols-1 gap-2">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- JSON-RPC 2.0 Live Traffic Inspector -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold text-slate-200">JSON-RPC 2.0 MCP Traffic Log</span>
+              <button onclick="clearMcpLogs()" class="text-[11px] text-slate-400 hover:text-white cursor-pointer">Clear</button>
+            </div>
+            <div id="mcpLogViewer" class="bg-black/60 border border-white/10 rounded-xl p-3 font-mono-code text-[10.5px] text-cyan-200/90 max-h-40 overflow-y-auto space-y-2 transcript-scroll">
+              <!-- Logs injected here -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. STATE & CONFIGURATION
+    // =========================================================================
+    const apiKey = ""; // Runtime-provided Gemini API Key
+    const GEMINI_MODEL = "gemini-3-flash-preview";
+
+    const state = {
+      status: "listening", // 'idle' | 'listening' | 'thinking' | 'speaking'
+      isMicActive: false,
+      audioLevel: 0.08,
+      targetAudioLevel: 0.08,
+      mcpEndpoint: "http://localhost:8080/mcp",
+      mcpToken: "",
+      mcpConnectedMode: "hybrid", // 'live' | 'hybrid'
+      tools: [
+        {
+          name: "hermes_search_memory",
+          uri: "hermes://memory/semantic_search",
+          description: "Truy xuất trí nhớ ngữ cảnh, ghi chú và tri thức cá nhân trên Hermes Server.",
+          enabled: true
+        },
+        {
+          name: "hermes_get_system_status",
+          uri: "hermes://telemetry/cluster_health",
+          description: "Kiểm tra trạng thái dịch vụ, CPU/RAM, uptime và các MCP worker đang chạy.",
+          enabled: true
+        },
+        {
+          name: "hermes_execute_workflow",
+          uri: "hermes://workflows/trigger",
+          description: "Kích hoạt quy trình tự động hóa (tổng hợp báo cáo, đồng bộ tác vụ, webhook).",
+          enabled: true
+        },
+        {
+          name: "hermes_fetch_docs",
+          uri: "hermes://resources/knowledge_base",
+          description: "Đọc tài liệu kỹ thuật, API spec và hướng dẫn nội bộ từ kho Hermes.",
+          enabled: true
+        }
+      ],
+      messages: [],
+      mcpLogs: []
+    };
+
+    // =========================================================================
+    // 2. WAVEFORM VISUALIZER (MULTI-LAYERED GLOWING SINE WAVES)
+    // =========================================================================
+    const canvas = document.getElementById("waveCanvas");
+    const ctx = canvas.getContext("2d");
+    let wavePhase = 0;
+
+    function resizeWaveCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener("resize", resizeWaveCanvas);
+
+    function renderWaveform() {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      const centerY = height / 2;
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Smooth audio level interpolation
+      if (state.status === "speaking") {
+        state.targetAudioLevel = 0.55 + Math.sin(wavePhase * 2.3) * 0.25 + Math.random() * 0.18;
+      } else if (state.status === "thinking") {
+        state.targetAudioLevel = 0.32 + Math.sin(wavePhase * 1.5) * 0.1;
+      } else if (!state.isMicActive) {
+        state.targetAudioLevel = 0.16 + Math.sin(wavePhase * 0.7) * 0.04;
+      }
+      state.audioLevel += (state.targetAudioLevel - state.audioLevel) * 0.14;
+
+      const maxAmp = (height * 0.36) * Math.min(1.25, state.audioLevel * 1.65);
+
+      // Layered waves inspired by Gemini Live glowing cyan/purple ribbon
+      const layers = [
+        { freq: 1.6, speed: 0.045, ampScale: 1.0,  phaseOffset: 0.0,  alpha: 0.95, lineWidth: 2.2, fillAlpha: 0.22 },
+        { freq: 2.2, speed: -0.035, ampScale: 0.78, phaseOffset: 1.4, alpha: 0.75, lineWidth: 1.7, fillAlpha: 0.14 },
+        { freq: 1.2, speed: 0.028, ampScale: 0.62, phaseOffset: 2.7,  alpha: 0.55, lineWidth: 1.3, fillAlpha: 0.10 }
+      ];
+
+      layers.forEach((layer, idx) => {
+        const strokeGrad = ctx.createLinearGradient(0, centerY, width, centerY);
+        strokeGrad.addColorStop(0.0, "rgba(56, 189, 248, 0.05)");
+        strokeGrad.addColorStop(0.22, `rgba(56, 189, 248, ${layer.alpha})`);
+        strokeGrad.addColorStop(0.5, `rgba(99, 102, 241, ${layer.alpha})`);
+        strokeGrad.addColorStop(0.78, `rgba(168, 85, 247, ${layer.alpha})`);
+        strokeGrad.addColorStop(1.0, "rgba(168, 85, 247, 0.05)");
+
+        const fillGrad = ctx.createLinearGradient(0, centerY - maxAmp, 0, centerY + maxAmp);
+        fillGrad.addColorStop(0, `rgba(56, 189, 248, ${layer.fillAlpha})`);
+        fillGrad.addColorStop(0.5, `rgba(99, 102, 241, ${layer.fillAlpha * 1.2})`);
+        fillGrad.addColorStop(1, `rgba(168, 85, 247, ${layer.fillAlpha})`);
+
+        const pointsTop = [];
+        const pointsBottom = [];
+        const step = 3;
+
+        for (let x = 0; x <= width; x += step) {
+          const normX = (x / width) * 2 - 1; // -1 to 1
+          // Bell-curve envelope tapering smoothly to 0 at edges
+          const envelope = Math.pow(Math.max(0, 1 - normX * normX), 2.3);
+          const wave1 = Math.sin(normX * Math.PI * layer.freq + wavePhase * (idx % 2 === 0 ? 1 : -0.85) + layer.phaseOffset);
+          const wave2 = Math.cos(normX * Math.PI * (layer.freq * 1.7) - wavePhase * 0.7);
+          const yOffset = envelope * maxAmp * layer.ampScale * (0.68 * wave1 + 0.32 * wave2);
+
+          pointsTop.push({ x, y: centerY - Math.abs(yOffset) - envelope * 2 });
+          pointsBottom.push({ x, y: centerY + Math.abs(yOffset) + envelope * 2 });
+        }
+
+        // Draw symmetric glowing ribbon body
+        ctx.save();
+        ctx.beginPath();
+        pointsTop.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+        for (let i = pointsBottom.length - 1; i >= 0; i--) {
+          ctx.lineTo(pointsBottom[i].x, pointsBottom[i].y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = fillGrad;
+        ctx.fill();
+
+        // Draw upper & lower neon strokes with subtle glow
+        ctx.shadowBlur = idx === 0 ? 14 : 6;
+        ctx.shadowColor = idx === 0 ? "rgba(56, 189, 248, 0.65)" : "rgba(168, 85, 247, 0.45)";
+        ctx.strokeStyle = strokeGrad;
+        ctx.lineWidth = layer.lineWidth;
+
+        ctx.beginPath();
+        pointsTop.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+        ctx.stroke();
+
+        ctx.beginPath();
+        pointsBottom.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      wavePhase += state.status === "speaking" ? 0.085 : (state.status === "thinking" ? 0.065 : 0.038);
+      requestAnimationFrame(renderWaveform);
+    }
+
+    // =========================================================================
+    // 3. UI STATE & AVATAR SYNCHRONIZATION
+    // =========================================================================
+    function setAppStatus(newStatus, customLabel) {
+      state.status = newStatus;
+      const statusText = document.getElementById("statusText");
+      const userRing = document.getElementById("userAvatarRing");
+      const geminiRing = document.getElementById("geminiAvatarRing");
+
+      userRing.classList.remove("active");
+      geminiRing.classList.remove("active");
+
+      if (newStatus === "listening") {
+        statusText.textContent = customLabel || (state.isMicActive ? "Listening..." : "Ready");
+        if (state.isMicActive) userRing.classList.add("active");
+      } else if (newStatus === "thinking") {
+        statusText.textContent = customLabel || "MCP Query...";
+        geminiRing.classList.add("active");
+      } else if (newStatus === "speaking") {
+        statusText.textContent = customLabel || "Speaking...";
+        geminiRing.classList.add("active");
+      } else {
+        statusText.textContent = customLabel || "Standby";
+      }
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function renderTranscript() {
+      const container = document.getElementById("transcriptContainer");
+      container.innerHTML = "";
+
+      state.messages.forEach((msg, index) => {
+        const wrapper = document.createElement("div");
+        wrapper.className = `flex flex-col ${msg.role === "user" ? "items-start" : "items-end"} animate-[fadeIn_0.25s_ease]`;
+
+        const bubble = document.createElement("div");
+        bubble.className = `${
+          msg.role === "user" ? "bubble-user text-slate-100 rounded-2xl rounded-tl-sm" : "bubble-gemini text-slate-100 rounded-2xl rounded-tr-sm"
+        } max-w-[85%] px-4 py-2.5 text-[13.5px] leading-relaxed shadow-sm`;
+
+        let mcpHtml = "";
+        if (msg.mcpCall) {
+          const detailId = `mcp-detail-${index}`;
+          mcpHtml = `
+            <div class="mb-2">
+              <button onclick="document.getElementById('${detailId}').classList.toggle('hidden')"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/30 text-[11px] font-mono-code text-cyan-300 transition cursor-pointer">
+                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                <span>${escapeHtml(msg.mcpCall.uri)}</span>
+                <span class="text-cyan-400/70">▾</span>
+              </button>
+              <pre id="${detailId}" class="hidden mt-1.5 p-2 rounded-lg bg-black/50 border border-white/10 font-mono-code text-[10px] text-slate-300 overflow-x-auto">${escapeHtml(JSON.stringify(msg.mcpCall.payload, null, 2))}</pre>
+            </div>
+          `;
+        }
+
+        bubble.innerHTML = `${mcpHtml}<div>${escapeHtml(msg.text).replace(/\n/g, "<br/>")}</div>`;
+        wrapper.appendChild(bubble);
+        container.appendChild(wrapper);
+      });
+
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // =========================================================================
+    // 4. HERMES MCP PROTOCOL CLIENT (JSON-RPC 2.0 + HYBRID FALLBACK)
+    // =========================================================================
+    function logMcpTraffic(direction, payload) {
+      const time = new Date().toLocaleTimeString("vi-VN", { hour12: false });
+      state.mcpLogs.unshift({ time, direction, payload });
+      if (state.mcpLogs.length > 25) state.mcpLogs.pop();
+      renderMcpLogs();
+    }
+
+    function renderMcpLogs() {
+      const viewer = document.getElementById("mcpLogViewer");
+      if (!viewer) return;
+      if (state.mcpLogs.length === 0) {
+        viewer.innerHTML = `<div class="text-slate-500 italic">Chưa có gói tin JSON-RPC nào...</div>`;
+        return;
+      }
+      viewer.innerHTML = state.mcpLogs
+        .map(
+          (item) => `
+          <div class="border-b border-white/5 pb-1.5 last:border-b-0">
+            <div class="flex items-center justify-between text-[10px] ${
+              item.direction === "REQ →" ? "text-sky-400" : "text-purple-300"
+            }">
+              <span>${item.direction} Hermes MCP</span>
+              <span class="text-slate-500">${item.time}</span>
+            </div>
+            <pre class="whitespace-pre-wrap break-all text-slate-300 mt-0.5">${escapeHtml(
+              JSON.stringify(item.payload)
+            )}</pre>
+          </div>`
+        )
+        .join("");
+    }
+
+    function clearMcpLogs() {
+      state.mcpLogs = [];
+      renderMcpLogs();
+    }
+
+    async function invokeHermesMcpTool(toolName, args = {}) {
+      const rpcRequest = {
+        jsonrpc: "2.0",
+        id: `mcp-${Date.now()}`,
+        method: "tools/call",
+        params: {
+          name: toolName,
+          arguments: args
+        }
+      };
+
+      logMcpTraffic("REQ →", rpcRequest);
+
+      // Attempt real HTTP JSON-RPC call to configured Hermes MCP endpoint
+      const endpoint = document.getElementById("mcpEndpointInput")?.value.trim() || state.mcpEndpoint;
+      const token = document.getElementById("mcpTokenInput")?.value.trim() || state.mcpToken;
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1600);
+
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(rpcRequest),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          state.mcpConnectedMode = "live";
+          updateMcpStatusUI(true);
+          logMcpTraffic("RES ←", data);
+          return data.result || data;
+        }
+      } catch (_) {
+        // Graceful fallback to simulated Hermes MCP response when localhost server is unreachable
+      }
+
+      // Simulated Hermes MCP Server response
+      state.mcpConnectedMode = "hybrid";
+      const simulatedData = buildSimulatedHermesResponse(toolName, args);
+      const rpcResponse = {
+        jsonrpc: "2.0",
+        id: rpcRequest.id,
+        result: {
+          content: [{ type: "text", text: JSON.stringify(simulatedData) }],
+          isError: false,
+          source: "hermes-mcp-bridge"
+        }
+      };
+      logMcpTraffic("RES ←", rpcResponse);
+      return simulatedData;
+    }
+
+    function buildSimulatedHermesResponse(toolName, args) {
+      const now = new Date().toLocaleString("vi-VN");
+      switch (toolName) {
+        case "hermes_get_system_status":
+          return {
+            cluster: "hermes-core-01",
+            status: "HEALTHY",
+            uptime: "14d 08h 42m",
+            cpu_load: "23.4%",
+            memory_usage: "4.2 GB / 16 GB",
+            active_mcp_sessions: 3,
+            timestamp: now
+          };
+        case "hermes_search_memory":
+          return {
+            query: args.query || "ngữ cảnh gần đây",
+            matches: [
+              { id: "mem_901", topic: "Kiến trúc Hermes MCP", summary: "Kết nối song công JSON-RPC 2.0 với Gemini Live để truy xuất ngữ cảnh thời gian thực." },
+              { id: "mem_904", topic: "Lịch trình hôm nay", summary: "16:00 Họp đồng bộ API Gateway & kiểm thử luồng thoại." }
+            ]
+          };
+        case "hermes_execute_workflow":
+          return {
+            workflow: args.workflow_name || "daily_sync_pipeline",
+            execution_id: "wf_" + Math.floor(100000 + Math.random() * 900000),
+            state: "COMPLETED",
+            duration_ms: 340
+          };
+        case "hermes_fetch_docs":
+        default:
+          return {
+            resource: "hermes://docs/mcp-spec-v1",
+            title: "Tài liệu giao thức Hermes MCP",
+            excerpt: "Hermes hỗ trợ các phương thức chuẩn: initialize, tools/list, tools/call và resources/read qua HTTP/SSE."
+          };
+      }
+    }
+
+    async function pingHermesMcp() {
+      const pingPayload = { jsonrpc: "2.0", id: `ping-${Date.now()}`, method: "tools/list", params: {} };
+      logMcpTraffic("REQ →", pingPayload);
+
+      const endpoint = document.getElementById("mcpEndpointInput").value.trim();
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1500);
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(pingPayload),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        if (res.ok) {
+          updateMcpStatusUI(true);
+          logMcpTraffic("RES ←", { jsonrpc: "2.0", status: "CONNECTED_LIVE", endpoint });
+          return;
+        }
+      } catch (_) {}
+
+      updateMcpStatusUI(false);
+      logMcpTraffic("RES ←", {
+        jsonrpc: "2.0",
+        status: "HYBRID_SIMULATION_READY",
+        note: "Không tìm thấy server cục bộ tại " + endpoint + ". Đang chạy chế độ mô phỏng Hermes MCP thông minh."
+      });
+    }
+
+    function updateMcpStatusUI(isLive) {
+      const label = document.getElementById("mcpConnStateLabel");
+      const dot = document.getElementById("mcpHeaderDot");
+      if (isLive) {
+        label.textContent = "Connected (Live Server)";
+        label.className = "px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/40";
+        dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34D399]";
+      } else {
+        label.textContent = "Hybrid Ready (Auto-Fallback)";
+        label.className = "px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30";
+        dot.className = "w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#38BDF8]";
+      }
+    }
+
+    function renderMcpTools() {
+      const list = document.getElementById("mcpToolsList");
+      const activeCount = state.tools.filter((t) => t.enabled).length;
+      document.getElementById("activeToolCount").textContent = activeCount;
+      document.getElementById("mcpBadgeCount").textContent = activeCount;
+
+      list.innerHTML = state.tools
+        .map(
+          (tool, idx) => `
+          <div class="flex items-center justify-between gap-3 bg-white/[0.03] border border-white/10 rounded-xl p-2.5">
+            <div class="min-w-0">
+              <div class="font-mono-code text-[11px] font-medium text-sky-300 truncate">${tool.name}</div>
+              <div class="text-[10.5px] text-slate-400 truncate">${tool.description}</div>
+            </div>
+            <button onclick="toggleTool(${idx})"
+              class="w-10 h-5 rounded-full transition relative shrink-0 cursor-pointer ${
+                tool.enabled ? "bg-sky-500" : "bg-white/15"
+              }">
+              <span class="block w-3.5 h-3.5 rounded-full bg-white transition-transform transform ${
+                tool.enabled ? "translate-x-5" : "translate-x-1"
+              }"></span>
+            </button>
+          </div>`
+        )
+        .join("");
+    }
+
+    function toggleTool(idx) {
+      state.tools[idx].enabled = !state.tools[idx].enabled;
+      renderMcpTools();
+    }
+
+    function toggleMcpDrawer(open) {
+      const drawer = document.getElementById("mcpDrawer");
+      if (open) {
+        renderMcpTools();
+        renderMcpLogs();
+        drawer.classList.remove("hidden");
+      } else {
+        drawer.classList.add("hidden");
+      }
+    }
+
+    // =========================================================================
+    // 5. GEMINI CONVERSATION ENGINE + MCP TOOL ORCHESTRATION
+    // =========================================================================
+    function detectRelevantMcpTool(userText) {
+      const q = userText.toLowerCase();
+      const enabledTools = state.tools.filter((t) => t.enabled);
+      if (enabledTools.length === 0) return null;
+
+      if (q.includes("hệ thống") || q.includes("server") || q.includes("status") || q.includes("cpu") || q.includes("trạng thái")) {
+        return enabledTools.find((t) => t.name === "hermes_get_system_status") || null;
+      }
+      if (q.includes("nhớ") || q.includes("memory") || q.includes("lịch") || q.includes("ghi chú") || q.includes("tìm")) {
+        return enabledTools.find((t) => t.name === "hermes_search_memory") || null;
+      }
+      if (q.includes("chạy") || q.includes("workflow") || q.includes("tự động") || q.includes("đồng bộ") || q.includes("kích hoạt")) {
+        return enabledTools.find((t) => t.name === "hermes_execute_workflow") || null;
+      }
+      if (q.includes("tài liệu") || q.includes("docs") || q.includes("hermes") || q.includes("mcp")) {
+        return enabledTools.find((t) => t.name === "hermes_fetch_docs") || null;
+      }
+      return null;
+    }
+
+    async function callGeminiWithExponentialBackoff(payload, retries = 3) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+      let delay = 1000;
+
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          return await response.json();
+        } catch (err) {
+          if (attempt === retries) throw err;
+          await new Promise((r) => setTimeout(r, delay));
+          delay *= 2;
+        }
+      }
+    }
+
+    async function processUserMessage(userText) {
+      const cleanText = userText.trim();
+      if (!cleanText) return;
+
+      // Stop any ongoing speech synthesis
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+
+      state.messages.push({ role: "user", text: cleanText });
+      renderTranscript();
+
+      setAppStatus("thinking", "Thinking...");
+
+      // Check if an Hermes MCP tool should be invoked
+      let mcpContextBlock = "";
+      let mcpCallMeta = null;
+      const matchedTool = detectRelevantMcpTool(cleanText);
+
+      if (matchedTool) {
+        setAppStatus("thinking", "Hermes MCP...");
+        const toolResult = await invokeHermesMcpTool(matchedTool.name, { query: cleanText });
+        mcpCallMeta = {
+          uri: matchedTool.uri,
+          payload: toolResult
+        };
+        mcpContextBlock = `\n[Dữ liệu vừa truy xuất từ công cụ Hermes MCP (${matchedTool.name})]: ${JSON.stringify(toolResult)}`;
+      }
+
+      // Build conversation history for Gemini
+      const systemInstruction = {
+        parts: [
+          {
+            text:
+              "Bạn là Gemini Live kết nối trực tiếp với Hermes MCP (Model Context Protocol). " +
+              "Hãy trả lời ngắn gọn, tự nhiên, thân thiện như đang trò chuyện bằng giọng nói trực tiếp (2-3 câu súc tích, không dùng markdown phức tạp hay ký tự sao *). " +
+              "Luôn ưu tiên tiếng Việt tự nhiên (trừ khi người dùng nói tiếng Anh). " +
+              "Nếu có dữ liệu từ Hermes MCP đính kèm, hãy lồng ghép thông tin đó một cách tự nhiên vào câu trả lời."
+          }
+        ]
+      };
+
+      const historyContents = state.messages.slice(-8).map((m, idx, arr) => {
+        const isLast = idx === arr.length - 1;
+        return {
+          role: m.role === "user" ? "user" : "model",
+          parts: [{ text: isLast ? m.text + mcpContextBlock : m.text }]
+        };
+      });
+
+      try {
+        const result = await callGeminiWithExponentialBackoff({
+          contents: historyContents,
+          systemInstruction
+        });
+
+        const replyText =
+          result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
+          "Mình đã nhận được tín hiệu từ Hermes MCP nhưng chưa có nội dung phản hồi cụ thể.";
+
+        state.messages.push({
+          role: "gemini",
+          text: replyText,
+          mcpCall: mcpCallMeta
+        });
+        renderTranscript();
+        speakReply(replyText);
+      } catch (error) {
+        const fallbackReply = mcpCallMeta
+          ? `Mình đã truy vấn ${mcpCallMeta.uri} trên Hermes MCP thành công. Hệ thống đang hoạt động ổn định và sẵn sàng hỗ trợ bạn.`
+          : "Kết nối Gemini đang tạm gián đoạn, bạn thử nói lại hoặc kiểm tra mạng nhé.";
+
+        state.messages.push({
+          role: "gemini",
+          text: fallbackReply,
+          mcpCall: mcpCallMeta
+        });
+        renderTranscript();
+        speakReply(fallbackReply);
+      }
+    }
+
+    // =========================================================================
+    // 6. BROWSER SPEECH RECOGNITION & SPEECH SYNTHESIS (VOICE LOOP)
+    // =========================================================================
+    let recognition = null;
+    let audioContext = null;
+    let analyser = null;
+    let micStream = null;
+    let meterAnimId = null;
+
+    function initSpeechRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) return null;
+
+      const rec = new SpeechRecognition();
+      rec.lang = "vi-VN";
+      rec.continuous = true;
+      rec.interimResults = true;
+
+      rec.onresult = (event) => {
+        let interim = "";
+        let finalTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interim += transcript;
+          }
+        }
+
+        const interimBar = document.getElementById("interimBar");
+        const interimText = document.getElementById("interimText");
+
+        if (interim) {
+          interimBar.classList.remove("hidden");
+          interimText.textContent = interim;
+          setAppStatus("listening", "Listening...");
+        } else {
+          interimBar.classList.add("hidden");
+        }
+
+        if (finalTranscript.trim()) {
+          interimBar.classList.add("hidden");
+          processUserMessage(finalTranscript.trim());
+        }
+      };
+
+      rec.onerror = (e) => {
+        if (e.error === "not-allowed") {
+          stopVoiceSession();
+          toggleTextInput(true);
+        }
+      };
+
+      rec.onend = () => {
+        if (state.isMicActive) {
+          try {
+            rec.start();
+          } catch (_) {}
+        }
+      };
+
+      return rec;
+    }
+
+    async function startMicAudioMeter() {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(micStream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const updateMeter = () => {
+          if (!state.isMicActive) return;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+          const avg = sum / dataArray.length;
+          if (state.status === "listening") {
+            state.targetAudioLevel = Math.max(0.16, Math.min(1.15, (avg / 65) + 0.14));
+          }
+          meterAnimId = requestAnimationFrame(updateMeter);
+        };
+        updateMeter();
+      } catch (_) {
+        // Ignore if mic hardware isn't accessible in sandbox
+      }
+    }
+
+    function stopMicAudioMeter() {
+      if (meterAnimId) cancelAnimationFrame(meterAnimId);
+      if (micStream) {
+        micStream.getTracks().forEach((t) => t.stop());
+        micStream = null;
+      }
+      if (audioContext) {
+        audioContext.close().catch(() => {});
+        audioContext = null;
+      }
+    }
+
+    function toggleVoiceSession() {
+      if (state.isMicActive) {
+        stopVoiceSession();
+      } else {
+        startVoiceSession();
+      }
+    }
+
+    function startVoiceSession() {
+      state.isMicActive = true;
+      const btn = document.getElementById("micToggleBtn");
+      btn.classList.add("mic-btn-listening");
+      document.getElementById("micIconOn").classList.remove("hidden");
+      document.getElementById("micIconOff").classList.add("hidden");
+
+      setAppStatus("listening", "Listening...");
+      startMicAudioMeter();
+
+      if (!recognition) recognition = initSpeechRecognition();
+      if (recognition) {
+        try {
+          recognition.start();
+        } catch (_) {}
+      }
+    }
+
+    function stopVoiceSession() {
+      state.isMicActive = false;
+      const btn = document.getElementById("micToggleBtn");
+      btn.classList.remove("mic-btn-listening");
+      document.getElementById("interimBar").classList.add("hidden");
+      stopMicAudioMeter();
+
+      if (recognition) {
+        try {
+          recognition.stop();
+        } catch (_) {}
+      }
+      setAppStatus("idle", "Standby");
+    }
+
+    function speakReply(text) {
+      const voiceSetting = document.getElementById("voiceToggleSelect")?.value || "on";
+      if (voiceSetting === "off" || !("speechSynthesis" in window)) {
+        setAppStatus("speaking", "Speaking...");
+        setTimeout(() => {
+          setAppStatus("listening", state.isMicActive ? "Listening..." : "Ready");
+        }, Math.min(3500, Math.max(1400, text.length * 45)));
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "vi-VN";
+      utterance.rate = 1.04;
+      utterance.pitch = 1.02;
+
+      utterance.onstart = () => setAppStatus("speaking", "Speaking...");
+      utterance.onend = () => setAppStatus("listening", state.isMicActive ? "Listening..." : "Ready");
+      utterance.onerror = () => setAppStatus("listening", state.isMicActive ? "Listening..." : "Ready");
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // =========================================================================
+    // 7. KEYBOARD TEXT INPUT & SESSION HELPERS
+    // =========================================================================
+    function toggleTextInput(forceShow) {
+      const form = document.getElementById("textInputForm");
+      const input = document.getElementById("chatTextInput");
+      const shouldShow = typeof forceShow === "boolean" ? forceShow : form.classList.contains("hidden");
+
+      if (shouldShow) {
+        form.classList.remove("hidden");
+        input.focus();
+      } else {
+        form.classList.add("hidden");
+      }
+    }
+
+    function handleTextSubmit(event) {
+      event.preventDefault();
+      const input = document.getElementById("chatTextInput");
+      const val = input.value.trim();
+      if (!val) return;
+      input.value = "";
+      processUserMessage(val);
+    }
+
+    function resetConversation() {
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      state.messages = [
+        {
+          role: "gemini",
+          text: "Chào bạn! Mình là Gemini Live đã kết nối với Hermes MCP. Bạn muốn trò chuyện hay kiểm tra ngữ cảnh từ Hermes?",
+          mcpCall: {
+            uri: "hermes://session/initialize",
+            payload: { protocolVersion: "2025-03-26", server: "Hermes MCP Bridge", status: "ready" }
+          }
+        }
+      ];
+      renderTranscript();
+      toggleMcpDrawer(false);
+    }
+
+    // =========================================================================
+    // 8. BOOTSTRAP APPLICATION
+    // =========================================================================
+    window.addEventListener("load", () => {
+      resizeWaveCanvas();
+      renderWaveform();
+      renderMcpTools();
+
+      // Seed initial welcome transcript & MCP handshake log
+      logMcpTraffic("REQ →", { jsonrpc: "2.0", id: "init-1", method: "initialize", params: { clientInfo: { name: "Gemini-Live-Web", version: "1.0" } } });
+      logMcpTraffic("RES ←", { jsonrpc: "2.0", id: "init-1", result: { serverInfo: { name: "Hermes-MCP", version: "2.4.0" }, capabilities: { tools: true, resources: true } } });
+
+      state.messages = [
+        {
+          role: "gemini",
+          text: "Xin chào! Gemini Live đã sẵn sàng và kết nối với Hermes MCP. Nhấn nút Micro bên dưới để nói chuyện hoặc mở bàn phím để nhắn tin nhé.",
+          mcpCall: {
+            uri: "hermes://session/initialize",
+            payload: { bridge: "Hermes MCP", transport: "JSON-RPC 2.0", tools_loaded: 4 }
+          }
+        }
+      ];
+      renderTranscript();
+      setAppStatus("listening", "Listening...");
+    });
+  </script>
+</body>
+</html>

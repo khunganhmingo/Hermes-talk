@@ -1,0 +1,6 @@
+{
+  "name": "Gemini Live — Hermes MCP",
+  "description": "Real-time voice conversation assistant powered by Gemini Live API with Hermes MCP tool orchestration.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
