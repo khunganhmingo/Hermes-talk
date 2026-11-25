@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { auth } from '../lib/firebase';
 import type {
   AppStatus,
   ChatMessage,
@@ -89,7 +90,7 @@ export function useGeminiLive({ mcpConfig, tools, onMcpLogs }: UseGeminiLiveOpti
     {
       id: 'welcome-1',
       role: 'gemini',
-      text: 'Xin chào! Gemini Live đã kết nối với Hermes MCP. Nhấn nút Micro để trò chuyện bằng giọng nói thời gian thực hoặc gõ tin nhắn bên dưới.',
+      text: 'Xin chào! Cuộc trò chuyện đang kết nối trực tiếp tới Hermes MCP. Gemini sẽ dịch và đọc lại nguyên văn câu trả lời từ Hermes cho bạn.',
       timestamp: nowTimeLabel(),
       mcpCalls: [
         {
@@ -264,9 +265,17 @@ export function useGeminiLive({ mcpConfig, tools, onMcpLogs }: UseGeminiLiveOpti
       ttsAbortRef.current = abortController;
 
       try {
+        const idToken = await auth.currentUser?.getIdToken();
+        if (!idToken) {
+          return speakFallback('Vui lòng đăng nhập tài khoản để sử dụng giọng đọc Gemini.');
+        }
+
         const res = await fetch('/api/tts', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
           body: JSON.stringify({
             text,
             voiceName: options?.voiceName ?? mcpConfigRef.current.voiceName,
@@ -542,6 +551,14 @@ export function useGeminiLive({ mcpConfig, tools, onMcpLogs }: UseGeminiLiveOpti
     setStatusLabel('Đang kết nối...');
 
     try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setErrorMessage('Vui lòng đăng nhập tài khoản để bắt đầu trò chuyện Gemini Live.');
+        setStatus('idle');
+        setStatusLabel('Sẵn sàng');
+        return;
+      }
+
       const micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -593,6 +610,7 @@ export function useGeminiLive({ mcpConfig, tools, onMcpLogs }: UseGeminiLiveOpti
         endpoint: cfg.endpoint,
         token: cfg.token,
         mode: cfg.mode,
+        idToken,
       });
       const wsUrl = `${wsProtocol}//${window.location.host}/live?${params.toString()}`;
       const ws = new WebSocket(wsUrl);
@@ -812,9 +830,17 @@ export function useGeminiLive({ mcpConfig, tools, onMcpLogs }: UseGeminiLiveOpti
       setStatusLabel('Hermes MCP...');
 
       try {
+        const idToken = await auth.currentUser?.getIdToken();
+        if (!idToken) {
+          throw new Error('Vui lòng đăng nhập tài khoản để gửi tin nhắn tới Gemini.');
+        }
+
         const res = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
           body: JSON.stringify({
             history: messagesRef.current.map((m) => ({ role: m.role, text: m.text })),
             message: clean,
@@ -886,7 +912,7 @@ export function useGeminiLive({ mcpConfig, tools, onMcpLogs }: UseGeminiLiveOpti
       {
         id: `welcome-${Date.now()}`,
         role: 'gemini',
-        text: 'Xin chào! Cuộc trò chuyện mới đã sẵn sàng với Hermes MCP.',
+        text: 'Xin chào! Cuộc trò chuyện mới đã kết nối trực tiếp tới Hermes MCP; Gemini sẽ dịch và đọc lại câu trả lời của Hermes.',
         timestamp: nowTimeLabel(),
       },
     ]);

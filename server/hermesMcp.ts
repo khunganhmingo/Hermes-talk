@@ -127,6 +127,24 @@ export const BUILTIN_HERMES_TOOLS: McpToolDefinition[] = [
     enabled: true,
     source: 'builtin',
   },
+  {
+    name: 'hermes_chat',
+    uri: 'hermes://conversation/reply',
+    description:
+      'Gửi trực tiếp câu hỏi, lời chào hoặc yêu cầu hội thoại bất kỳ tới hệ thống Hermes MCP để Hermes xử lý và trả lời.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          description: 'Nội dung tin nhắn hoặc câu hỏi của người dùng gửi trực tiếp tới Hermes MCP.',
+        },
+      },
+      required: ['message'],
+    },
+    enabled: true,
+    source: 'builtin',
+  },
 ];
 
 export function handleLocalHermesRpc(body: {
@@ -284,6 +302,42 @@ function executeBuiltinTool(toolName: string, args: Record<string, unknown>) {
       };
     }
 
+    case 'hermes_chat': {
+      const userMsg = String(args.message ?? args.query ?? '').trim();
+      const lower = userMsg.toLowerCase();
+      const keywords = lower.split(/\s+/).filter((w) => w.length > 2);
+      const matchedMemories = memoryStore.filter((entry) => {
+        if (!lower) return false;
+        const haystack = `${entry.topic} ${entry.content}`.toLowerCase();
+        return haystack.includes(lower) || keywords.some((kw) => haystack.includes(kw));
+      });
+
+      let reply: string;
+      if (!userMsg) {
+        reply = 'Hermes MCP Core is ready and awaiting your command or question.';
+      } else if (matchedMemories.length > 0) {
+        const top = matchedMemories[0];
+        reply = `Hermes MCP found relevant context (${top.topic}): ${top.content}`;
+      } else {
+        reply =
+          `Hermes MCP Core received your message: "${userMsg}". ` +
+          `Current Hermes state: ${memoryStore.length} memory entries stored, ${workflowHistory.length} workflows executed. ` +
+          `Available Hermes capabilities: semantic memory search, save memory notes, cluster health telemetry, workflow execution, and MCP documentation.`;
+      }
+
+      return {
+        source: 'Hermes-MCP-Core',
+        receivedMessage: userMsg,
+        reply,
+        matchedMemories,
+        systemSummary: {
+          savedMemories: memoryStore.length,
+          recentWorkflows: workflowHistory.length,
+        },
+        timestamp: now,
+      };
+    }
+
     default:
       return {
         note: `Executed tool ${toolName}`,
@@ -291,6 +345,31 @@ function executeBuiltinTool(toolName: string, args: Record<string, unknown>) {
         timestamp: now,
       };
   }
+}
+
+export function pickFallbackHermesTool(
+  tools: McpToolDefinition[],
+  userMessage: string
+): { toolName: string; args: Record<string, unknown> } {
+  const enabled = tools.filter((t) => t.enabled);
+  const pool = enabled.length > 0 ? enabled : BUILTIN_HERMES_TOOLS;
+
+  const preferred =
+    pool.find((t) => /^(hermes_chat|chat|ask|converse|agent|message)$/i.test(t.name)) ||
+    pool.find((t) => /(chat|ask|converse|message|prompt|query|hermes)/i.test(t.name)) ||
+    pool[0];
+
+  const props = preferred.inputSchema?.properties ?? {};
+  const propKeys = Object.keys(props);
+  const targetKey =
+    propKeys.find((k) => /^(message|query|prompt|input|text|question|topic)$/i.test(k)) ||
+    propKeys[0] ||
+    'message';
+
+  return {
+    toolName: preferred.name,
+    args: { [targetKey]: userMessage },
+  };
 }
 
 async function postJsonRpc(

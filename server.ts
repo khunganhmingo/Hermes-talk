@@ -6,14 +6,16 @@ import { fileURLToPath } from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import {
+  FunctionCallingConfigMode,
   LiveServerMessage,
   Modality,
   ThinkingLevel,
   type Content,
-  type Part,
 } from '@google/genai';
 import {
   ai,
+  GEMINI_HERMES_ROUTER_INSTRUCTION,
+  GEMINI_HERMES_TRANSLATOR_INSTRUCTION,
   GEMINI_LIVE_SYSTEM_INSTRUCTION,
   toGeminiFunctionDeclarations,
 } from './server/geminiClient.ts';
@@ -22,13 +24,22 @@ import {
   discoverHermesTools,
   handleLocalHermesRpc,
   invokeHermesTool,
+  pickFallbackHermesTool,
 } from './server/hermesMcp.ts';
+import { authorizeBackendRequest } from './server/firebaseAuth.ts';
+import { evaluateAccountAccess, hasPermission } from './src/lib/rbac.ts';
 import type { GeminiVoiceName, McpCallMeta, McpLogEntry, McpToolDefinition } from './src/types.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const ALLOWED_VOICES: GeminiVoiceName[] = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir'];
+
+function extractBearerToken(req: express.Request): string | undefined {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) return undefined;
+  return header.slice(7).trim() || undefined;
+}
 
 function safeSend(ws: WebSocket, payload: unknown) {
   if (ws.readyState === WebSocket.OPEN) {
@@ -44,6 +55,23 @@ async function startServer() {
   app.post('/api/hermes/mcp', (req, res) => {
     const rpcResponse = handleLocalHermesRpc(req.body ?? {});
     res.json(rpcResponse);
+  });
+
+  // Verify authenticated user's account role, permissions & expiration on backend
+  app.get('/api/account/me', async (req, res) => {
+    const token = extractBearerToken(req);
+    const authCheck = await authorizeBackendRequest(token);
+    if (!authCheck.ok || !authCheck.account) {
+      res.status(authCheck.statusCode).json({
+        error: authCheck.error || 'Chưa xác thực',
+        account: authCheck.account ?? null,
+      });
+      return;
+    }
+    res.json({
+      account: authCheck.account,
+      access: evaluateAccountAccess(authCheck.account),
+    });
   });
 
   // Check server-side Gemini API connection status (never exposes key)
@@ -197,6 +225,12 @@ async function startServer() {
   // Google Gemini Neural Text-to-Speech (Vietnamese & multilingual)
   app.post('/api/tts', async (req, res) => {
     try {
+      const authCheck = await authorizeBackendRequest(extractBearerToken(req), 'tts_preview');
+      if (!authCheck.ok) {
+        res.status(authCheck.statusCode).json({ error: authCheck.error });
+        return;
+      }
+
       if (!process.env.GEMINI_API_KEY) {
         res.status(500).json({ error: 'GEMINI_API_KEY chưa được cấu hình.' });
         return;
@@ -299,6 +333,12 @@ async function startServer() {
   // Text-mode Gemini chat endpoint (for keyboard messages when Live voice isn't streaming)
   app.post('/api/chat', async (req, res) => {
     try {
+      const authCheck = await authorizeBackendRequest(extractBearerToken(req), 'text_chat');
+      if (!authCheck.ok || !authCheck.account) {
+        res.status(authCheck.statusCode).json({ error: authCheck.error });
+        return;
+      }
+
       if (!process.env.GEMINI_API_KEY) {
         res.status(500).json({
           error: 'GEMINI_API_KEY chưa được cấu hình trong Settings > Secrets.',
@@ -323,12 +363,36 @@ async function startServer() {
         return;
       }
 
-      const functionDeclarations = toGeminiFunctionDeclarations(tools);
+      const canUseMcp = hasPermission(authCheck.account, 'hermes_mcp');
+      if (!canUseMcp) {
+        res.status(403).json({
+          error:
+            'Cuộc trò chuyện kết nối trực tiếp tới Hermes MCP. Tài khoản của bạn chưa được Admin cấp quyền "Hermes MCP Tools".',
+        });
+        return;
+      }
+
+      let activeTools: McpToolDefinition[] =
+        Array.isArray(tools) && tools.length > 0 ? tools : BUILTIN_HERMES_TOOLS;
+
+      // Ensure remote tools are discovered if a remote endpoint is set without remote tools loaded
+      if (
+        mcpConfig.mode !== 'local' &&
+        mcpConfig.endpoint?.trim() &&
+        !activeTools.some((t) => t.source === 'remote')
+      ) {
+        const discovery = await discoverHermesTools(mcpConfig);
+        if (discovery.tools.length > 0) {
+          activeTools = discovery.tools;
+        }
+      }
+
+      const functionDeclarations = toGeminiFunctionDeclarations(activeTools);
       const geminiTools =
         functionDeclarations.length > 0 ? [{ functionDeclarations }] : undefined;
 
       const contents: Content[] = [
-        ...history.slice(-10).map((item) => ({
+        ...history.slice(-8).map((item) => ({
           role: item.role === 'user' ? 'user' : 'model',
           parts: [{ text: item.text }],
         })),
@@ -338,89 +402,112 @@ async function startServer() {
         },
       ];
 
-      const response1 = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents,
-        config: {
-          systemInstruction: GEMINI_LIVE_SYSTEM_INSTRUCTION,
-          tools: geminiTools,
-        },
-      });
+      // Step 1: Force routing directly to a Hermes MCP tool
+      let selectedCalls: Array<{ id?: string; name?: string; args?: Record<string, unknown> }> = [];
+      if (geminiTools) {
+        try {
+          const routeResponse = await ai.models.generateContent({
+            model: 'gemini-4-hydrogen',
+            contents,
+            config: {
+              systemInstruction: GEMINI_HERMES_ROUTER_INSTRUCTION,
+              tools: geminiTools,
+              toolConfig: {
+                functionCallingConfig: {
+                  mode: FunctionCallingConfigMode.ANY,
+                },
+              },
+            },
+          });
+          if (routeResponse.functionCalls && routeResponse.functionCalls.length > 0) {
+            selectedCalls = routeResponse.functionCalls.map((fc) => ({
+              id: fc.id,
+              name: fc.name,
+              args: (fc.args ?? {}) as Record<string, unknown>,
+            }));
+          }
+        } catch {
+          // Fall through to deterministic Hermes MCP tool fallback
+        }
+      }
 
-      const functionCalls = response1.functionCalls;
+      if (selectedCalls.length === 0) {
+        const fallback = pickFallbackHermesTool(activeTools, message.trim());
+        selectedCalls = [
+          {
+            id: `direct-${Date.now()}`,
+            name: fallback.toolName,
+            args: fallback.args,
+          },
+        ];
+      }
+
+      // Execute directly on Hermes MCP Server (Remote or Local Bridge)
       const mcpCalls: McpCallMeta[] = [];
       const allLogs: McpLogEntry[] = [];
 
-      if (functionCalls && functionCalls.length > 0) {
-        const previousContent = response1.candidates?.[0]?.content;
-        const functionResponseParts: Part[] = [];
-
-        for (const call of functionCalls) {
-          const toolName = call.name || 'hermes_search_memory';
-          const args = (call.args ?? {}) as Record<string, unknown>;
-          const exec = await invokeHermesTool({
-            toolName,
-            args,
-            endpoint: mcpConfig.endpoint,
-            token: mcpConfig.token,
-            mode: mcpConfig.mode,
-          });
-
-          allLogs.push(...exec.logs);
-          mcpCalls.push({
-            toolName,
-            uri: exec.uri,
-            args,
-            result: exec.result,
-            mode: exec.mode,
-          });
-
-          functionResponseParts.push({
-            functionResponse: {
-              id: call.id,
-              name: toolName,
-              response: { result: exec.result },
-            },
-          });
-        }
-
-        const followUpContents: Content[] = [...contents];
-        if (previousContent) {
-          followUpContents.push(previousContent);
-        }
-        followUpContents.push({
-          role: 'user',
-          parts: functionResponseParts,
+      for (const call of selectedCalls) {
+        const toolName = call.name || 'hermes_chat';
+        const args = call.args ?? {};
+        const exec = await invokeHermesTool({
+          toolName,
+          args,
+          endpoint: mcpConfig.endpoint,
+          token: mcpConfig.token,
+          mode: mcpConfig.mode,
         });
 
-        const response2 = await ai.models.generateContent({
-          model: 'gemini-4-hydrogen',
-          contents: followUpContents,
-          config: {
-            systemInstruction: GEMINI_LIVE_SYSTEM_INSTRUCTION,
-            tools: geminiTools,
-          },
+        allLogs.push(...exec.logs);
+        mcpCalls.push({
+          toolName,
+          uri: exec.uri,
+          args,
+          result: exec.result,
+          mode: exec.mode,
         });
-
-        res.json({
-          text:
-            response2.text?.trim() ||
-            'Mình đã truy xuất dữ liệu từ Hermes MCP thành công.',
-          mcpCalls,
-          mcpLogs: allLogs,
-        });
-        return;
       }
+
+      // Step 2: Gemini ONLY translates and formats Hermes MCP's exact response for reading aloud
+      const hermesPayloadText = JSON.stringify(
+        mcpCalls.map((c) => ({
+          tool: c.toolName,
+          uri: c.uri,
+          mode: c.mode,
+          hermesResponse: c.result,
+        })),
+        null,
+        2
+      );
+
+      const translateResponse = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text:
+                  `Câu hỏi gốc của người dùng (chỉ dùng để hiểu ngữ cảnh xưng hô): "${message.trim()}"\n\n` +
+                  `Dữ liệu phản hồi nguyên văn từ Hermes MCP:\n${hermesPayloadText}\n\n` +
+                  `Hãy dịch và diễn đạt lại nguyên văn nội dung trả lời từ Hermes MCP sang tiếng Việt rõ ràng để đọc lại cho người dùng. Không thêm thông tin ngoài dữ liệu Hermes.`,
+              },
+            ],
+          },
+        ],
+        config: {
+          systemInstruction: GEMINI_HERMES_TRANSLATOR_INSTRUCTION,
+        },
+      });
 
       res.json({
         text:
-          response1.text?.trim() ||
-          'Mình đã nhận được tin nhắn của bạn nhưng chưa có phản hồi văn bản.',
-        mcpCalls: [],
-        mcpLogs: [],
+          translateResponse.text?.trim() ||
+          'Hermes MCP đã phản hồi nhưng không có nội dung văn bản để dịch.',
+        mcpCalls,
+        mcpLogs: allLogs,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Lỗi kết nối Gemini API';
+      const message = err instanceof Error ? err.message : 'Lỗi kết nối Gemini / Hermes MCP';
       res.status(500).json({ error: message });
     }
   });
@@ -460,6 +547,18 @@ async function startServer() {
   const wss = new WebSocketServer({ server, path: '/live' });
 
   wss.on('connection', async (clientWs, req) => {
+    const reqUrl = new URL(req.url || '/live', 'http://localhost');
+    const idToken = reqUrl.searchParams.get('idToken') || undefined;
+    const authCheck = await authorizeBackendRequest(idToken, 'voice_live');
+    if (!authCheck.ok || !authCheck.account) {
+      safeSend(clientWs, {
+        type: 'error',
+        message: authCheck.error || 'Bạn chưa có quyền sử dụng Gemini Live.',
+      });
+      clientWs.close();
+      return;
+    }
+
     if (!process.env.GEMINI_API_KEY) {
       safeSend(clientWs, {
         type: 'error',
@@ -469,7 +568,6 @@ async function startServer() {
       return;
     }
 
-    const reqUrl = new URL(req.url || '/live', 'http://localhost');
     const requestedVoice = reqUrl.searchParams.get('voice') as GeminiVoiceName | null;
     const voiceName: GeminiVoiceName =
       requestedVoice && ALLOWED_VOICES.includes(requestedVoice) ? requestedVoice : 'Zephyr';
@@ -479,6 +577,17 @@ async function startServer() {
       token: reqUrl.searchParams.get('token') || '',
       mode: (reqUrl.searchParams.get('mode') as 'auto' | 'remote' | 'local') || 'auto',
     };
+
+    const canUseMcp = hasPermission(authCheck.account, 'hermes_mcp');
+    if (!canUseMcp) {
+      safeSend(clientWs, {
+        type: 'error',
+        message:
+          'Cuộc trò chuyện kết nối trực tiếp tới Hermes MCP. Tài khoản của bạn chưa được Admin cấp quyền "Hermes MCP Tools".',
+      });
+      clientWs.close();
+      return;
+    }
 
     let activeTools: McpToolDefinition[] = BUILTIN_HERMES_TOOLS.map((t) => ({
       ...t,
@@ -573,7 +682,11 @@ async function startServer() {
             functionResponses.push({
               id: call.id,
               name: toolName,
-              response: { result: exec.result },
+              response: {
+                result: exec.result,
+                instruction:
+                  'Chỉ dịch nội dung kết quả từ Hermes MCP này sang tiếng Việt tự nhiên và đọc lại cho người dùng, không tự thêm thông tin ngoài.',
+              },
             });
           }
 

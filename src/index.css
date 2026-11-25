@@ -37,6 +37,20 @@
   -webkit-text-fill-color: transparent;
 }
 
+@keyframes hermes-backdrop-breathe {
+  0%, 100% {
+    transform: scale(1.01) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.035) translate3d(0, -6px, 0);
+  }
+}
+
+.hermes-backdrop-motion {
+  animation: hermes-backdrop-breathe 9s ease-in-out infinite;
+  will-change: transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

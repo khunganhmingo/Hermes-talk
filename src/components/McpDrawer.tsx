@@ -4,15 +4,12 @@ import {
   CheckCircle2,
   LogIn,
   LogOut,
-  MessageSquarePlus,
   RefreshCw,
   Sparkles,
-  Trash2,
   Volume2,
   X,
 } from 'lucide-react';
 import type {
-  ConversationSession,
   GeminiVoiceName,
   McpConfig,
 } from '../types';
@@ -43,11 +40,9 @@ interface McpDrawerProps {
   isPinging: boolean;
   pingError: string | null;
   onPing: () => void;
-  sessions: ConversationSession[];
-  activeSessionId: string;
-  onSelectSession: (sessionId: string) => void;
-  onNewSession: () => void;
-  onDeleteSession: (sessionId: string) => void;
+  accountRole?: 'admin' | 'user' | null;
+  canPreviewVoice?: boolean;
+  canUseHermes?: boolean;
 }
 
 const VOICES: Array<{ id: GeminiVoiceName; label: string }> = [
@@ -76,11 +71,9 @@ export function McpDrawer({
   isPinging,
   pingError,
   onPing,
-  sessions,
-  activeSessionId,
-  onSelectSession,
-  onNewSession,
-  onDeleteSession,
+  accountRole = null,
+  canPreviewVoice = true,
+  canUseHermes = true,
 }: McpDrawerProps) {
   const [isPreviewingVoice, setIsPreviewingVoice] = useState(false);
   const [voicePreviewNotice, setVoicePreviewNotice] = useState<{
@@ -113,22 +106,22 @@ export function McpDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 lg:static lg:inset-auto lg:w-[400px] lg:shrink-0 flex flex-col justify-end lg:justify-start">
-      {/* Mobile backdrop */}
+    <div className="fixed inset-0 z-50 flex flex-col justify-end items-center">
+      {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm lg:hidden"
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      <aside className="relative z-10 w-full max-h-[88dvh] lg:max-h-none lg:h-full bg-[#0D111A] border-t lg:border-t-0 lg:border-l border-white/10 rounded-t-3xl lg:rounded-none flex flex-col overflow-hidden">
-        {/* Mobile grab handle */}
-        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-3 lg:hidden" />
+      <aside className="relative z-10 w-full max-w-[430px] max-h-[86dvh] bg-[#0D111A] border-t border-x border-white/10 rounded-t-3xl flex flex-col overflow-hidden shadow-2xl">
+        {/* Grab handle */}
+        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mt-3" />
 
         {/* Drawer Header */}
         <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between shrink-0">
           <div>
-            <h2 className="text-sm font-semibold text-white">Hermes MCP & Lịch sử</h2>
+            <h2 className="text-sm font-semibold text-white">Kết nối Gemini &amp; Hermes</h2>
             <p className="text-xs text-slate-400 mt-0.5">
               {connectedMode === 'remote' ? 'Connected Remote' : 'Local Hermes Core'} · {activeEndpoint}
             </p>
@@ -171,6 +164,11 @@ export function McpDrawer({
                     <div className="min-w-0">
                       <div className="text-xs font-medium text-white truncate">
                         {user.displayName || 'Tài khoản Google'}
+                        {accountRole && (
+                          <span className="ml-1.5 text-[10.5px] font-normal text-sky-300">
+                            · {accountRole === 'admin' ? 'Admin' : 'User'}
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-slate-400 truncate">
                         {user.email}
@@ -310,14 +308,23 @@ export function McpDrawer({
                 <button
                   type="button"
                   onClick={handlePreviewVoiceClick}
-                  disabled={isPreviewingVoice}
-                  title="Nghe thử giọng nói đang chọn"
-                  className="h-9 px-3 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/30 text-sky-300 font-medium text-[11px] inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shrink-0 whitespace-nowrap"
+                  disabled={isPreviewingVoice || !canPreviewVoice}
+                  title={
+                    canPreviewVoice
+                      ? 'Nghe thử giọng nói đang chọn'
+                      : 'Tài khoản chưa được cấp quyền Đọc giọng nói TTS'
+                  }
+                  className="h-9 px-3 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/30 text-sky-300 font-medium text-[11px] inline-flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
                 >
                   <Volume2 className={`w-3.5 h-3.5 ${isPreviewingVoice ? 'animate-pulse' : ''}`} />
                   <span>{isPreviewingVoice ? 'Đang tải...' : 'Nghe thử'}</span>
                 </button>
               </div>
+              {!canPreviewVoice && (
+                <p className="mt-1.5 text-[11px] text-amber-300/90">
+                  Quyền Đọc giọng nói TTS chưa được kích hoạt cho tài khoản này.
+                </p>
+              )}
               {voicePreviewNotice && (
                 <p
                   className={`mt-1.5 text-[11px] leading-relaxed ${
@@ -336,7 +343,8 @@ export function McpDrawer({
               <button
                 type="button"
                 role="switch"
-                aria-checked={config.speakTextReplies}
+                disabled={!canPreviewVoice}
+                aria-checked={canPreviewVoice && config.speakTextReplies}
                 aria-label="Tự động đọc tin nhắn văn bản bằng giọng Gemini"
                 onClick={() =>
                   onConfigChange({
@@ -344,13 +352,13 @@ export function McpDrawer({
                     speakTextReplies: !config.speakTextReplies,
                   })
                 }
-                className={`w-10 h-6 rounded-full transition-colors relative shrink-0 cursor-pointer ${
-                  config.speakTextReplies ? 'bg-sky-500' : 'bg-white/15'
+                className={`w-10 h-6 rounded-full transition-colors relative shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                  canPreviewVoice && config.speakTextReplies ? 'bg-sky-500' : 'bg-white/15'
                 }`}
               >
                 <span
                   className={`block w-4 h-4 rounded-full bg-white transition-transform transform ${
-                    config.speakTextReplies ? 'translate-x-5' : 'translate-x-1'
+                    canPreviewVoice && config.speakTextReplies ? 'translate-x-5' : 'translate-x-1'
                   }`}
                 />
               </button>
@@ -359,7 +367,12 @@ export function McpDrawer({
 
           {/* Endpoint Config */}
           <section className="space-y-3 pt-2 border-t border-white/10">
-            <h3 className="text-xs font-semibold text-slate-200">Kết nối Hermes MCP Server</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold text-slate-200">Kết nối Hermes MCP Server</h3>
+              {!canUseHermes && (
+                <span className="text-[10.5px] text-amber-300">Chưa cấp quyền MCP</span>
+              )}
+            </div>
 
             <div className="space-y-2.5">
               <div>
@@ -430,59 +443,6 @@ export function McpDrawer({
                 {pingError}
               </div>
             )}
-          </section>
-
-          {/* Conversation History */}
-          <section className="space-y-2.5 pt-2 border-t border-white/10">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-slate-200">Lịch sử cuộc trò chuyện</h3>
-              <button
-                type="button"
-                onClick={onNewSession}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-[11px] font-medium text-sky-300 transition-colors cursor-pointer whitespace-nowrap"
-              >
-                <MessageSquarePlus className="w-3.5 h-3.5" />
-                <span>Cuộc trò chuyện mới</span>
-              </button>
-            </div>
-
-            <div className="space-y-2 max-h-60 overflow-y-auto transcript-scroll">
-              {sessions.map((session) => {
-                const isActive = session.id === activeSessionId;
-                return (
-                  <div
-                    key={session.id}
-                    className={`flex items-center justify-between gap-2 rounded-xl border p-2.5 transition-colors ${
-                      isActive
-                        ? 'bg-sky-500/10 border-sky-400/35'
-                        : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.06]'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onSelectSession(session.id)}
-                      className="min-w-0 flex-1 text-left cursor-pointer"
-                    >
-                      <div className="text-xs font-medium text-slate-100 truncate">
-                        {session.title}
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5 tabular-nums">
-                        {session.updatedAt} · {session.messages.length} tin nhắn
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteSession(session.id)}
-                      title="Xóa cuộc trò chuyện này"
-                      aria-label={`Xóa ${session.title}`}
-                      className="min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-slate-500 hover:text-rose-400 hover:bg-white/5 transition-colors cursor-pointer shrink-0"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
           </section>
         </div>
       </aside>

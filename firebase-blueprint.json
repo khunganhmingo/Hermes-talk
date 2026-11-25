@@ -1,5 +1,289 @@
 {
   "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Registered application account with RBAC role, feature permissions, lock status, and subscription expiration.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Account document identifier (Firebase UID or invite key)",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified account email address",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User full display name",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Profile avatar URL",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "role": {
+          "type": "string",
+          "description": "Access tier role",
+          "enum": ["admin", "user"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Account access status",
+          "enum": ["active", "locked"]
+        },
+        "permissions": {
+          "type": "array",
+          "description": "Granted feature permissions for this account"
+        },
+        "expiresAtMs": {
+          "type": "number",
+          "description": "Expiration epoch timestamp in milliseconds (0 means unlimited)"
+        },
+        "note": {
+          "type": "string",
+          "description": "Administrator notes for this account",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when account was created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last login"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "displayName",
+        "photoURL",
+        "role",
+        "status",
+        "permissions",
+        "expiresAtMs",
+        "note",
+        "createdAt",
+        "updatedAt",
+        "lastLoginAt"
+      ]
+    },
+    "UserInvite": {
+      "title": "UserInvite",
+      "description": "Admin pre-provisioned user configuration keyed by sanitized email prior to first Google login.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Sanitized email key",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Invited user email",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Pre-configured display name",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "description": "Assigned role",
+          "enum": ["admin", "user"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Initial account status",
+          "enum": ["active", "locked"]
+        },
+        "permissions": {
+          "type": "array",
+          "description": "Assigned permissions"
+        },
+        "expiresAtMs": {
+          "type": "number",
+          "description": "Expiration epoch timestamp in milliseconds"
+        },
+        "note": {
+          "type": "string",
+          "description": "Administrator note",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "claimedUid": {
+          "type": "string",
+          "description": "UID that claimed this invite, or empty string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "displayName",
+        "role",
+        "status",
+        "permissions",
+        "expiresAtMs",
+        "note",
+        "claimedUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminGrant": {
+      "title": "AdminGrant",
+      "description": "Elevated admin authorization registry keyed by Firebase UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Admin Firebase UID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Admin email address",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "addedBy": {
+          "type": "string",
+          "description": "UID of admin who granted role",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server grant timestamp"
+        }
+      },
+      "required": ["uid", "email", "addedBy", "createdAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Immutable security and audit log entry for authentication, admin actions, and service usage.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Log entry ID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "actorUid": {
+          "type": "string",
+          "description": "UID of user performing the action",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "actorEmail": {
+          "type": "string",
+          "description": "Email of actor",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "actorRole": {
+          "type": "string",
+          "description": "Role at time of action",
+          "enum": ["admin", "user"]
+        },
+        "action": {
+          "type": "string",
+          "description": "Audit action code",
+          "enum": [
+            "login",
+            "logout",
+            "create_user",
+            "update_user",
+            "lock_user",
+            "unlock_user",
+            "extend_user",
+            "delete_user",
+            "auto_expire_lock",
+            "update_profile",
+            "use_voice_live",
+            "use_text_chat",
+            "use_hermes_mcp",
+            "use_tts_preview"
+          ]
+        },
+        "targetId": {
+          "type": "string",
+          "description": "Target entity ID",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "targetLabel": {
+          "type": "string",
+          "description": "Target human-readable label",
+          "minLength": 0,
+          "maxLength": 160
+        },
+        "detail": {
+          "type": "string",
+          "description": "Action summary detail",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "actorUid",
+        "actorEmail",
+        "actorRole",
+        "action",
+        "targetId",
+        "targetLabel",
+        "detail",
+        "createdAt"
+      ]
+    },
     "ChatSession": {
       "title": "ChatSession",
       "description": "A saved Gemini Live + Hermes MCP conversation session belonging to an authenticated user.",
@@ -35,6 +319,22 @@
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "User and Admin account records with permissions and expiration."
+    },
+    "/userInvites/{inviteId}": {
+      "schema": { "$ref": "#/entities/UserInvite" },
+      "description": "Pre-registered user invitations created by Admin."
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminGrant" },
+      "description": "Trusted Admin UID registry."
+    },
+    "/activityLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Immutable activity and security audit logs."
+    },
     "/users/{userId}/sessions/{sessionId}": {
       "schema": { "$ref": "#/entities/ChatSession" },
       "description": "Private conversation sessions owned by a signed-in user."

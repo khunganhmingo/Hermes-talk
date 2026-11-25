@@ -149,7 +149,7 @@ export function WaveformCanvas({ status, audioLevelRef }: WaveformCanvasProps) {
   }, [audioLevelRef]);
 
   return (
-    <div className="relative w-full h-36 sm:h-44 shrink-0 flex items-center justify-center overflow-hidden select-none">
+    <div className="relative w-full h-24 sm:h-28 shrink-0 flex items-center justify-center overflow-hidden select-none">
       <canvas ref={canvasRef} className="w-full h-full block" />
     </div>
   );
